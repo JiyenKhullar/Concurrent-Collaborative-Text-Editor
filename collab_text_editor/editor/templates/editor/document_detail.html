@@ -1,0 +1,424 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ document.title }}</title>
+    <link href="https://cdn.quilljs.com/1.3.7/quill.snow.css" rel="stylesheet">
+    <style>
+        /* Base Styles */
+        body {
+            font-family: 'Arial', sans-serif;
+            background-color: #1a1a1a;
+            color: #fff;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            justify-content: flex-start;
+        }
+
+        h1 {
+            text-align: center;
+            font-size: 36px;
+            color: gold;
+            margin-top: 40px;
+        }
+
+        /* Main Content */
+        .container {
+            width: 90%;
+            max-width: 1200px;
+            margin: 20px auto;
+            background-color: #333;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+        }
+
+        /* Back Button */
+        button {
+            background-color: #222;
+            color: gold;
+            border: 1px solid gold;
+            padding: 10px 20px;
+            font-size: 18px;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background-color 0.3s ease;
+        }
+
+        button:hover {
+            background-color: gold;
+            color: black;
+        }
+
+        /* Document Information */
+        .document-info {
+            margin-bottom: 20px;
+        }
+
+        .document-info p {
+            font-size: 18px;
+        }
+
+        .document-info ul {
+            list-style-type: none;
+            padding: 0;
+        }
+
+        .document-info ul li {
+            margin-bottom: 10px;
+        }
+
+        /* Editor Styles */
+        #editor {
+            width: 100%;
+            height: 60vh;
+            background-color: #222;
+            color: #fff;
+            border: 1px solid #555;
+            border-radius: 4px;
+            margin-bottom: 20px;
+            flex-grow: 1;
+        }
+
+        textarea {
+            width: 100%;
+            padding: 10px;
+            background-color: #222;
+            color: #fff;
+            border: 1px solid #555;
+            border-radius: 4px;
+            margin-bottom: 20px;
+            font-size: 16px;
+        }
+
+        button[type="submit"] {
+            width: 100%;
+            padding: 14px;
+            background-color: gold;
+            color: black;
+            font-size: 18px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        button[type="submit"]:hover {
+            background-color: #f9d71c;
+        }
+
+        /* Cursor and Selection Highlighting */
+        .cursor-highlight {
+            position: absolute;
+            border: 2px solid red;
+            border-radius: 5px;
+            pointer-events: none;
+        }
+
+        .selection-highlight {
+            position: absolute;
+            background-color: rgba(255, 0, 0, 0.2);
+            border-radius: 5px;
+            pointer-events: none;
+        }
+
+        /* Mobile Styles */
+        @media (max-width: 768px) {
+            h1 {
+                font-size: 28px;
+            }
+
+            #editor {
+                height: 50vh;
+            }
+
+            .container {
+                width: 90%;
+            }
+        }
+        #autosave-indicator {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            background-color: #444;
+            color: #fff;
+            padding: 8px 12px;
+            border-radius: 4px;
+            display: none;
+            font-size: 14px;
+            opacity: 0.8;
+        }
+
+    </style>
+</head>
+<body>
+
+    <h1>{{ document.title }}</h1>
+
+    <div class="container">
+        <a href="{% url 'document_list' %}">
+            <button>Back to Document List</button>
+        </a>
+
+        <div class="document-info">
+            <p><strong>Owner:</strong> {{ document.owner.username }}</p>
+            <p><strong>Your Username:</strong> {{ current_user.username }}</p>
+        </div>
+
+        <h3>Comments</h3>
+        <div id="comments-section">
+            {% for comment in document.comment_set.all %}
+                <div>
+                    <strong>{{ comment.user.username }}:</strong> {{ comment.text }} 
+                    <small>{{ comment.created_at }}</small><br>
+                    <strong>Highlighted Text:</strong> "{{ comment.highlighted_text }}"
+                </div>
+            {% endfor %}
+        </div>
+
+
+        <h3>Edit Content</h3>
+        <div id="editor"></div>
+
+        <!-- Comment Form -->
+        <form method="POST">
+            {% csrf_token %}
+            <input type="hidden" name="title" value="{{ form.title.value }}">
+            <input type="hidden" id="content" name="content">
+            <textarea name="comment_text" id="comment_text" placeholder="Add your comment..."></textarea><br>
+            <button type="submit" name="save_document" value="true" id="save-button">Save Changes</button>
+        </form>
+
+        <h3>Collaborators</h3>
+        <div id="collaborators-section">
+            {% for collaborator in collaborators %}
+                <div>
+                    <strong>{{ collaborator.user.username }}:</strong> {{ collaborator.role }}
+                    {% if collaborator.user != current_user %}
+                        {% if document.owner == current_user %}  <!-- Only show to the document owner -->
+                            <form method="POST" style="display:inline;">
+                                {% csrf_token %}
+                                <input type="hidden" name="user_id" value="{{ collaborator.user.id }}">
+                                <select name="new_role">
+                                    <option value="Editor" {% if collaborator.role == 'Editor' %}selected{% endif %}>Editor</option>
+                                    <option value="Commenter" {% if collaborator.role == 'Commenter' %}selected{% endif %}>Commenter</option>
+                                    <option value="Viewer" {% if collaborator.role == 'Viewer' %}selected{% endif %}>Viewer</option>
+                                </select>
+                                <button type="submit" name="change_role">Change Role</button>
+                            </form>
+                            <form method="POST" style="display:inline;">
+                                {% csrf_token %}
+                                <input type="hidden" name="user_id" value="{{ collaborator.user.id }}">
+                                <button type="submit" name="remove_collaborator">Remove</button>
+                            </form>
+                        {% endif %}
+                    {% endif %}
+                </div>
+            {% endfor %}
+        </div>
+
+        <h3>Add Collaborator</h3>
+        {% if document.owner == current_user %}
+            <form method="POST" id="add-collaborator-form">
+                {% csrf_token %}
+                <label for="user">Select User:</label>
+                <select name="user" id="user" required>
+                    {% for user in available_users %}
+                        <option value="{{ user.id }}">{{ user.username }}</option>
+                    {% endfor %}
+                </select><br><br>
+                
+                <label for="role">Select Role:</label>
+                <select name="role" id="role" required>
+                    <option value="Editor">Editor</option>
+                    <option value="Commenter">Commenter</option>
+                    <option value="Viewer">Viewer</option>
+                </select><br><br>
+
+                <button type="submit" name="add_collaborator">Add Collaborator</button>
+            </form>
+        {% endif %}
+
+    </div>
+
+    <script src="https://cdn.quilljs.com/1.3.6/quill.min.js"></script>
+    <script>
+        var quill = new Quill('#editor', {
+            theme: 'snow',
+            placeholder: 'Start typing...',
+            modules: {
+                toolbar: [
+                    ['bold', 'italic', 'underline'],
+                    ['link'],
+                    [{ 'list': 'ordered' }, { 'list': 'bullet' }],
+                    [{ 'font': [] }],
+                    [{ 'size': ['small', 'normal', 'large', 'huge']}]  // Font size dropdown
+                ]
+            }
+        });
+        // Function to handle scroll events and adjust highlight positions
+        document.querySelector('#editor').addEventListener('scroll', function() {
+            updateCursorHighlight();
+            updateSelectionHighlight();
+        });
+
+
+        // Populate Quill editor with the current content
+        quill.root.innerHTML = "{{ document.content|safe }}";
+        
+        setInterval(function() {
+            var saveButton = document.getElementById('save-button');
+            if (saveButton) {
+                saveButton.click();
+                console.log('Autosave triggered.');
+            } else {
+                console.error('Save button not found!');
+            }
+        }, 7000);
+
+        setTimeout(function(){
+            console.log("This will run after 0.3 seconds");
+        }, 300);
+
+        setInterval(function() {
+            location.reload();
+        }, 7000);
+
+
+        // Save the content in the hidden input when form is submitted
+        var form = document.querySelector('form');
+        form.onsubmit = function() {
+            var content = quill.root.innerHTML;
+            document.querySelector('#content').value = content;  // Update hidden content field
+
+            // Add 'save_document' field to the form before submission
+            var saveDocumentField = document.createElement('input');
+            saveDocumentField.type = 'hidden';
+            saveDocumentField.name = 'save_document';
+            saveDocumentField.value = 'true';
+            form.appendChild(saveDocumentField);  // Add it to the form
+        };
+
+        // Create divs for the cursor and selection highlight boxes
+        var cursorHighlightBox = document.createElement('div');
+        cursorHighlightBox.classList.add('cursor-highlight');
+        document.body.appendChild(cursorHighlightBox);
+
+        var selectionHighlightBox = document.createElement('div');
+        selectionHighlightBox.classList.add('selection-highlight');
+        document.body.appendChild(selectionHighlightBox);
+
+        // Update highlight and cursor positions based on selection and scroll position
+        function updateCursorHighlight() {
+            var range = quill.getSelection();
+            if (range) {
+                var bounds = quill.getBounds(range.index);
+                var editorBounds = document.querySelector('#editor').getBoundingClientRect();
+                var scrollTop = document.querySelector('#editor').scrollTop;
+
+                // Adjust position to account for scroll and editor positioning
+                cursorHighlightBox.style.left = bounds.left + editorBounds.left + 'px';
+                cursorHighlightBox.style.top = bounds.top + editorBounds.top + scrollTop + 'px';
+                cursorHighlightBox.style.width = bounds.width + 'px';
+                cursorHighlightBox.style.height = bounds.height + 'px';
+            }
+        }
+
+        function updateSelectionHighlight() {
+            var range = quill.getSelection();
+            if (range && range.length > 0) {
+                var bounds = quill.getBounds(range.index, range.length);
+                var editorBounds = document.querySelector('#editor').getBoundingClientRect();
+                var scrollTop = document.querySelector('#editor').scrollTop;
+
+                // Adjust position to account for scroll and editor positioning
+                selectionHighlightBox.style.left = bounds.left + editorBounds.left + 'px';
+                selectionHighlightBox.style.top = bounds.top + editorBounds.top + scrollTop + 'px';
+                selectionHighlightBox.style.width = bounds.width + 'px';
+                selectionHighlightBox.style.height = bounds.height + 'px';
+                selectionHighlightBox.style.display = 'block';
+            } else {
+                selectionHighlightBox.style.display = 'none';
+            }
+        }
+
+        // Event listeners for cursor and selection changes
+        quill.on('selection-change', function() {
+            updateCursorHighlight();
+            updateSelectionHighlight();
+        });
+
+        quill.on('text-change', function() {
+            updateCursorHighlight();
+            updateSelectionHighlight();
+        });
+
+        // Initial update to show cursor and selection highlights
+        updateCursorHighlight();
+        updateSelectionHighlight();
+
+        let selectedText = ''; // Store the selected text
+        let selectedRange = null; // Store the range of the selection
+        let commentInputDiv = null; // Store reference to the comment box
+        let quillEditor = document.querySelector('#editor'); // Reference to the Quill editor
+
+        // Handle selection changes in Quill editor
+        quill.on('selection-change', function(range) {
+            if (range && range.length > 0) {
+                selectedRange = range;
+                selectedText = quill.getText(range.index, range.length);
+
+                // Create the comment input box if selected text is found
+                if (!commentInputDiv) {
+                    commentInputDiv = document.createElement('div');
+                    commentInputDiv.innerHTML = `
+                        <textarea id="commentText" placeholder="Add a comment..." rows="3"></textarea>
+                        <button id="saveComment">Save Comment</button>
+                    `;
+                    quillEditor.appendChild(commentInputDiv);
+                }
+            } else {
+                if (commentInputDiv) {
+                    commentInputDiv.remove();
+                    commentInputDiv = null;
+                }
+            }
+        });
+
+        // Save the comment when user clicks "Save Comment"
+        document.addEventListener('click', function(e) {
+            if (e.target && e.target.id === 'saveComment') {
+                let commentText = document.getElementById('commentText').value;
+                if (selectedText && commentText) {
+                    // Send comment text and selected text to the server using AJAX
+                    fetch('/save_comment/', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value,
+                        },
+                        body: JSON.stringify({
+                            selected_text: selectedText,
+                            comment_text: commentText,
+                            selected_range: selectedRange,
+                            document_id: "{{ document.id }}",
+                        }),
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.status === 'success') {
+                            window.location.reload();
+                        } else {
+                            alert('Error saving comment');
+                        }
+                    });
+                }
+            }
+        });
+
+    </script>
+</body>
+</html>

@@ -1,0 +1,11 @@
+asgiref 
+channels
+channels_redis
+Django
+msgpack
+pip==24.3.1
+psycopg2
+redis
+setuptools
+sqlparse
+tzdata
